@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Summary Bot - Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Server Summary Bot Settings</h1>
+      <p class="subtitle">Configure your data source and preferences</p>
+    </div>
+
+    <form id="settingsForm">
+      <!-- API Configuration -->
+      <section class="card">
+        <h2>API Configuration</h2>
+        <p class="card-desc">Connect to your server management API to fetch live data. Leave empty to use demo data.</p>
+
+        <div class="form-group">
+          <label for="apiEndpoint">API Endpoint URL</label>
+          <input type="url" id="apiEndpoint" placeholder="https://api.example.com/servers">
+          <span class="hint">The base URL of your server data API</span>
+        </div>
+
+        <div class="form-group">
+          <label for="apiKey">API Key</label>
+          <div class="input-with-toggle">
+            <input type="password" id="apiKey" placeholder="Enter your API key">
+            <button type="button" id="toggleApiKey" class="toggle-btn" title="Show/Hide">
+              <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
+          <span class="hint">Bearer token for API authentication</span>
+        </div>
+      </section>
+
+      <!-- Refresh Settings -->
+      <section class="card">
+        <h2>Refresh Settings</h2>
+
+        <div class="form-group">
+          <label for="refreshInterval">Auto-refresh Interval (minutes)</label>
+          <input type="number" id="refreshInterval" min="5" max="1440" value="30">
+          <span class="hint">How often to refresh cached server data in the background (5-1440 min)</span>
+        </div>
+
+        <div class="form-group">
+          <label for="staleThreshold">Stale Data Threshold (days)</label>
+          <input type="number" id="staleThreshold" min="1" max="90" value="7">
+          <span class="hint">Updates older than this are flagged as stale</span>
+        </div>
+      </section>
+
+      <!-- Notifications -->
+      <section class="card">
+        <h2>Notifications</h2>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="notifications" checked>
+            <span class="checkmark"></span>
+            Enable stale data notifications
+          </label>
+          <span class="hint">Get notified when server data becomes outdated</span>
+        </div>
+      </section>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button type="submit" class="btn primary">Save Settings</button>
+        <button type="button" id="resetBtn" class="btn secondary">Reset to Defaults</button>
+        <button type="button" id="testBtn" class="btn secondary">Test Connection</button>
+      </div>
+
+      <div id="statusMessage" class="status-message hidden"></div>
+    </form>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
