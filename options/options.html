@@ -14,10 +14,23 @@
     </div>
 
     <form id="settingsForm">
-      <!-- API Configuration -->
+      <!-- How It Works -->
       <section class="card">
-        <h2>API Configuration</h2>
-        <p class="card-desc">Connect to your server management API to fetch live data. Leave empty to use demo data.</p>
+        <h2>How to Import Machine Stats</h2>
+        <p class="card-desc">No API needed. Import directly from your company's machine stats portal.</p>
+        <ol class="how-to-steps">
+          <li>Open your machine stats portal (e.g. INTEGRIS) in the browser</li>
+          <li>Search for your machine name on the portal page</li>
+          <li>Click the Server Summary Bot extension icon</li>
+          <li>Click <strong>"Import from Current Page"</strong></li>
+        </ol>
+        <p class="card-desc" style="margin-top: 12px; margin-bottom: 0;">The extension reads Machine Name, OS, Model, Location, AD, SCCM, McAfee, and OneSign data directly from the page.</p>
+      </section>
+
+      <!-- API Configuration (Advanced) -->
+      <section class="card">
+        <h2>API Configuration (Advanced)</h2>
+        <p class="card-desc">Optional: Connect to a server management API if your organization provides one. Most users can skip this.</p>
 
         <div class="form-group">
           <label for="apiEndpoint">API Endpoint URL</label>

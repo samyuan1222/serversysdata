@@ -67,31 +67,37 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // ===== Data Refresh =====
 async function refreshCachedData() {
-  const stored = await chrome.storage.local.get(['lastMachine']);
+  const stored = await chrome.storage.local.get(['lastMachine', 'serverData']);
   if (!stored.lastMachine) return;
 
   const config = await chrome.storage.sync.get(['apiEndpoint', 'apiKey']);
-  if (!config.apiEndpoint) return;
 
-  try {
-    const url = new URL(config.apiEndpoint);
-    url.searchParams.set('machine', stored.lastMachine);
+  // If API is configured, fetch fresh data from API
+  if (config.apiEndpoint) {
+    try {
+      const url = new URL(config.apiEndpoint);
+      url.searchParams.set('machine', stored.lastMachine);
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (config.apiKey) {
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      const headers = { 'Content-Type': 'application/json' };
+      if (config.apiKey) {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      }
+
+      const response = await fetch(url.toString(), { headers });
+      if (!response.ok) return;
+
+      const data = await response.json();
+      await chrome.storage.local.set({ serverData: data });
+      await checkStaleUpdates(data);
+      return;
+    } catch {
+      // Silent failure for background refresh
     }
+  }
 
-    const response = await fetch(url.toString(), { headers });
-    if (!response.ok) return;
-
-    const data = await response.json();
-    await chrome.storage.local.set({ serverData: data });
-
-    // Check for stale updates and notify
-    await checkStaleUpdates(data);
-  } catch {
-    // Silent failure for background refresh
+  // For imported/cached data (no API), still check for stale updates
+  if (stored.serverData) {
+    await checkStaleUpdates(stored.serverData);
   }
 }
 

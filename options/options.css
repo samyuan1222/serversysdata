@@ -58,6 +58,23 @@ body {
   margin-bottom: 16px;
 }
 
+/* How-to Steps */
+.how-to-steps {
+  margin: 0;
+  padding: 0 0 0 20px;
+  color: #c8d6e5;
+  font-size: 13px;
+  line-height: 2;
+}
+
+.how-to-steps li {
+  padding-left: 4px;
+}
+
+.how-to-steps strong {
+  color: #4fc3f7;
+}
+
 /* Form */
 .form-group {
   margin-bottom: 16px;
