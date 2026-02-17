@@ -4,6 +4,7 @@
  */
 
 // DOM Elements
+const importPageBtn = document.getElementById('importPageBtn');
 const machineSearch = document.getElementById('machineSearch');
 const searchBtn = document.getElementById('searchBtn');
 const suggestions = document.getElementById('suggestions');
@@ -52,6 +53,7 @@ async function init() {
   }
 
   // Bind events
+  importPageBtn.addEventListener('click', importFromPage);
   searchBtn.addEventListener('click', performSearch);
   machineSearch.addEventListener('keydown', handleSearchKeydown);
   machineSearch.addEventListener('input', handleSearchInput);
@@ -65,6 +67,235 @@ async function init() {
       suggestions.classList.add('hidden');
     }
   });
+}
+
+// ===== Import from Page =====
+
+/**
+ * Scraper function that runs INSIDE the active tab.
+ * It searches the page DOM for labeled fields matching known server stats.
+ */
+function scrapePageForServerData() {
+  // Map of label patterns to data field names
+  const labelMap = [
+    { pattern: /machine\s*name/i, key: 'machineName' },
+    { pattern: /os\s*type/i, key: 'osType' },
+    { pattern: /operating\s*system/i, key: 'os' },
+    { pattern: /last\s*check[\s-]*in/i, key: 'lastCheckin' },
+    { pattern: /ad\s*created/i, key: 'adCreated' },
+    { pattern: /location/i, key: 'location' },
+    { pattern: /model/i, key: 'model' },
+    { pattern: /last\s*ad\s*update/i, key: 'lastAdUpdate' },
+    { pattern: /last\s*mcafee\s*update/i, key: 'lastMcafeeUpdate' },
+    { pattern: /last\s*sccm\s*update/i, key: 'lastSccmUpdate' },
+    { pattern: /last\s*onesign\s*update/i, key: 'lastOnesignUpdate' },
+  ];
+
+  const result = {};
+
+  /**
+   * Strategy 1: Look for <td>/<th> label cells in tables.
+   * The value is in the next <td> sibling.
+   */
+  function scrapeFromTables() {
+    const cells = document.querySelectorAll('td, th');
+    for (const cell of cells) {
+      const cellText = (cell.textContent || '').trim();
+      for (const { pattern, key } of labelMap) {
+        if (result[key]) continue;
+        if (pattern.test(cellText) && cellText.length < 40) {
+          // Value is in the next sibling <td>
+          const nextCell = cell.nextElementSibling;
+          if (nextCell) {
+            const val = (nextCell.textContent || '').trim();
+            if (val && val !== '--' && val !== 'N/A') {
+              result[key] = val;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Strategy 2: Look for <label> elements or elements with label-like classes/roles.
+   * The value is in the associated input/span/sibling.
+   */
+  function scrapeFromLabels() {
+    const labels = document.querySelectorAll('label, [class*="label"], [class*="Label"], dt');
+    for (const label of labels) {
+      const labelText = (label.textContent || '').trim();
+      for (const { pattern, key } of labelMap) {
+        if (result[key]) continue;
+        if (pattern.test(labelText) && labelText.length < 40) {
+          // Check for associated input via "for" attribute
+          const forId = label.getAttribute('for');
+          if (forId) {
+            const input = document.getElementById(forId);
+            if (input) {
+              const val = (input.value || input.textContent || '').trim();
+              if (val && val !== '--') { result[key] = val; continue; }
+            }
+          }
+          // Check next sibling
+          let sibling = label.nextElementSibling;
+          if (sibling) {
+            const val = (sibling.value || sibling.textContent || '').trim();
+            if (val && val !== '--') { result[key] = val; continue; }
+          }
+          // Check parent's next sibling (for dt/dd patterns)
+          const parentNext = label.parentElement && label.parentElement.nextElementSibling;
+          if (parentNext) {
+            const val = (parentNext.textContent || '').trim();
+            if (val && val !== '--') { result[key] = val; continue; }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Strategy 3: Generic text node scan.
+   * Finds any element whose direct text matches a label, then checks siblings/children.
+   */
+  function scrapeFromTextNodes() {
+    const allElements = document.querySelectorAll('span, div, p, strong, b, em, h3, h4, h5, h6, dd');
+    for (const el of allElements) {
+      // Only check direct text content (not nested children)
+      const directText = Array.from(el.childNodes)
+        .filter(n => n.nodeType === Node.TEXT_NODE)
+        .map(n => n.textContent.trim())
+        .join(' ')
+        .trim();
+
+      if (!directText || directText.length > 40) continue;
+
+      for (const { pattern, key } of labelMap) {
+        if (result[key]) continue;
+        if (pattern.test(directText)) {
+          // Check next sibling element
+          let next = el.nextElementSibling;
+          if (next) {
+            const val = (next.value || next.textContent || '').trim();
+            if (val && val !== '--' && val.length < 200) {
+              result[key] = val;
+              continue;
+            }
+          }
+          // Check parent's next sibling
+          const parentNext = el.parentElement && el.parentElement.nextElementSibling;
+          if (parentNext) {
+            const val = (parentNext.textContent || '').trim();
+            if (val && val !== '--' && val.length < 200) {
+              result[key] = val;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Run all strategies
+  scrapeFromTables();
+  scrapeFromLabels();
+  scrapeFromTextNodes();
+
+  // Return page title for context
+  result._pageTitle = document.title;
+  result._pageUrl = window.location.href;
+
+  return result;
+}
+
+/**
+ * Import server data by scraping the currently active browser tab.
+ */
+async function importFromPage() {
+  importPageBtn.disabled = true;
+  importPageBtn.textContent = 'Scanning page...';
+  showLoading(true);
+  hideStatus();
+
+  try {
+    // Get the active tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!tab || !tab.id) {
+      throw new Error('No active tab found.');
+    }
+
+    // Don't try to scrape chrome:// or extension pages
+    if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://'))) {
+      throw new Error('Cannot import from browser internal pages. Open your machine stats portal first.');
+    }
+
+    // Inject scraper and execute
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: scrapePageForServerData,
+    });
+
+    if (!results || !results[0] || !results[0].result) {
+      throw new Error('Could not read page data. Make sure you are on your machine stats portal.');
+    }
+
+    const scraped = results[0].result;
+
+    // Check if we found anything useful
+    const dataKeys = Object.keys(scraped).filter(k => !k.startsWith('_'));
+    if (dataKeys.length === 0) {
+      throw new Error(
+        'No machine stats found on this page. Make sure the page shows machine details (Machine Name, OS Type, etc.) and try again.'
+      );
+    }
+
+    // Build server data object from scraped data
+    const data = {
+      machineName: scraped.machineName || 'Unknown',
+      osType: scraped.osType || '',
+      os: scraped.os || '',
+      lastCheckin: scraped.lastCheckin || '',
+      adCreated: scraped.adCreated || '',
+      location: scraped.location || '',
+      model: scraped.model || '',
+      lastAdUpdate: scraped.lastAdUpdate || '',
+      lastMcafeeUpdate: scraped.lastMcafeeUpdate || '',
+      lastSccmUpdate: scraped.lastSccmUpdate || '',
+      lastOnesignUpdate: scraped.lastOnesignUpdate || '',
+      reportsUrl: scraped._pageUrl || '',
+      _importedFrom: scraped._pageUrl || '',
+      _importedAt: new Date().toISOString(),
+    };
+
+    currentServer = data;
+
+    // Save to storage
+    await chrome.storage.local.set({
+      lastMachine: data.machineName,
+      serverData: data,
+    });
+
+    machineSearch.value = data.machineName;
+    renderServer(data);
+
+    const fieldCount = dataKeys.length;
+    showStatus(`Imported ${fieldCount} fields for ${data.machineName}`, 'success');
+
+  } catch (err) {
+    showLoading(false);
+    showStatus(err.message || 'Failed to import from page.', 'error');
+    showEmptyState();
+  } finally {
+    importPageBtn.disabled = false;
+    importPageBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      Import from Current Page
+    `;
+  }
 }
 
 // ===== Search =====
